@@ -3,6 +3,7 @@
  * the owner a digest of what happened.
  */
 
+import { verifyJwt } from 'deepspace/worker'
 import type { ActionHandler } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import { ingestGate } from '../server/ingest.js'
@@ -36,9 +37,17 @@ export const endPlaytest: ActionHandler<Env> = async ({ userId, params, tools, e
 
   const digest = buildDigest(room.info.name, sessions.map((s) => s.data), issues.map((i) => i.data), reportCount)
 
-  const user = await tools.get('users', userId)
-  const email = user.success ? (user.data as { record?: { data: { email?: string } } }).record?.data.email : undefined
+  // The owner's address comes from their verified sign-in token. The app's
+  // `users` collection is not a reliable source: in the first live playtest
+  // the lookup returned no email and the digest was silently not sent.
+  const verified = await verifyJwt({ publicKey: env.AUTH_JWT_PUBLIC_KEY, issuer: env.AUTH_JWT_ISSUER }, callerJwt)
+  let email = verified.result?.claims.email
+  if (!email) {
+    const user = await tools.get('users', userId)
+    email = user.success ? (user.data as { record?: { data: { email?: string } } }).record?.data.email : undefined
+  }
   let emailed = false
+  if (!email) console.warn(`[endPlaytest] no email address for owner ${userId}; digest not sent`)
   if (email) {
     const sent = await tools.integration('email/send', {
       to: email,

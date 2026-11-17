@@ -56,6 +56,15 @@ test('room lifecycle: ingest, live dashboard, tester report, permissions', async
   const key = snippet.match(/IngestKey = "([^"]+)"/)![1]
   expect(key).toMatch(/^pk_/)
 
+  // The end-of-playtest digest is emailed to the address in the owner's
+  // token; prove the token carries it (sending is skipped here, it bills).
+  const tokenEmail = await dev.page.evaluate(async () => {
+    const t = await fetch('/api/auth/token', { method: 'POST', credentials: 'include' }).then((r) => r.json())
+    const payload = JSON.parse(atob(t.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload.email as string | undefined
+  })
+  expect(tokenEmail).toBe(dev.email)
+
   // Ingest rejects a wrong key and a malformed body.
   expect((await ingest(request, roomId, 'pk_wrong', { sessionId: 'sess-aaaaaaaa', events: [] })).status()).toBe(401)
   expect((await ingest(request, roomId, key, { sessionId: 'x', events: [] })).status()).toBe(400)
