@@ -44,3 +44,33 @@
   --color-shell: #fafafa;
   --color-shell-panel: #ffffff;
 }
+
+/* Workbench: Playtest Room's theme. A dark tool surface with an amber
+ * accent, the color of a "recording" light; live data reads as signal. */
+[data-theme="workbench"] {
+  color-scheme: dark;
+  --color-background: #0f1012;
+  --color-foreground: #e9e6df;
+  --color-card: #16181b;
+  --color-card-foreground: #e9e6df;
+  --color-popover: #1b1d21;
+  --color-popover-foreground: #e9e6df;
+  --color-primary: #f2a93b;
+  --color-primary-foreground: #1a1206;
+  --color-secondary: #22252a;
+  --color-secondary-foreground: #e9e6df;
+  --color-muted: #1d2024;
+  --color-muted-foreground: #9a968d;
+  --color-accent: #2a2d33;
+  --color-accent-foreground: #f6f3ec;
+  --color-destructive: #e5534b;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #2a2d32;
+  --color-input: #2f3238;
+  --color-ring: #f2a93b;
+  --shadow-card: 0 1px 0 0 rgba(255, 255, 255, 0.03) inset;
+  --shadow-card-hover: 0 0 0 1px rgba(242, 169, 59, 0.25);
+  --color-shell: #0c0d0f;
+  --color-shell-panel: #131518;
+  --radius: 0.375rem;
+}

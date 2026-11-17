@@ -64,13 +64,25 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
     if (!action) return c.json({ error: 'Action not found' }, 404)
     const params = await c.req.json<Record<string, unknown>>()
     const tools = createActionTools(c.env, auth.userId, callerJwt)
+    // Playtest actions also need tools for a room's own scope; they build
+    // them from this factory (src/actions/room-access.ts).
     const result = await action({ userId: auth.userId, params, tools, env: c.env, callerJwt })
     return c.json(result as unknown as Record<string, unknown>)
   })
 }
 
-function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
-  const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.DEEPSPACE_APP_ID}`))
+/**
+ * RBAC-off tools bound to one record scope. `scopeId` defaults to the app's
+ * main scope; Playtest Room passes `room:<roomId>` to reach a room's own
+ * Durable Object. The trust note at the top of this file applies in full.
+ */
+export function createActionTools(
+  env: Env,
+  userId: string,
+  callerJwt: string,
+  scopeId = `app:${env.DEEPSPACE_APP_ID}`,
+): ActionTools {
+  const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(scopeId))
 
   // The DO returns ActionResult<unknown>; callers below supply the precise
   // operation result type fixed by the SDK tools-api wire contract.

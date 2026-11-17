@@ -1,35 +1,30 @@
 /**
- * Cron task definitions — registered into the AppCronRoom DO at construction
- * time (worker.ts). The DO alarm fires `runTask(name, env)` on the schedule
- * declared here; the DO itself records executions, tracks history, and
- * pushes status to admin clients via the `/ws/cron/:roomId` WebSocket.
+ * Scheduled tasks, run by the AppCronRoom Durable Object (worker.ts).
  *
- * Each task declares EITHER `intervalMinutes` (run every N minutes) OR
- * `schedule` + `timezone` (5-field cron expression). CronRoom validates
- * the config at construction time and throws on ambiguous declarations.
- *
- * Example:
- *
- *   import type { CronTask } from 'deepspace/worker'
- *   import { buildCronContext } from 'deepspace/worker'
- *
- *   export const tasks: CronTask[] = [
- *     { name: 'heartbeat', intervalMinutes: 1 },
- *     { name: 'daily-report', schedule: '0 9 * * *', timezone: 'America/New_York' },
- *   ]
- *
- *   export async function runTask(name: string, env: Env): Promise<void> {
- *     const ctx = buildCronContext(env, env.OWNER_USER_ID, `app:${env.DEEPSPACE_APP_ID}`)
- *     if (name === 'heartbeat') {
- *       // …
- *     }
- *   }
+ * close-idle-sessions: a browser tab that is closed mid-game never sends
+ * `session_end`, so sessions would stay "live" forever. Every two minutes,
+ * each live room's ingest gate closes sessions with no traffic for 3 minutes.
  */
 
 import type { CronTask } from 'deepspace/worker'
+import type { Env } from '../worker.js'
+import { createActionTools } from './server/action-routes.js'
+import { ingestGate } from './server/ingest.js'
 
-export const tasks: CronTask[] = []
+export const tasks: CronTask[] = [{ name: 'close-idle-sessions', intervalMinutes: 2 }]
 
-export async function runTask(_name: string, _env: unknown): Promise<void> {
-  // No-op — implement your cron tasks here. Dispatch on `_name`.
+export async function runTask(name: string, env: Env): Promise<void> {
+  if (name !== 'close-idle-sessions') return
+  const tools = createActionTools(env, env.OWNER_USER_ID, '')
+  const live = await tools.query('rooms', { where: { status: 'live' }, limit: 200 })
+  if (!live.success) {
+    console.warn(`[cron] could not list rooms: ${live.error}`)
+    return
+  }
+  let closed = 0
+  for (const room of (live.data as { records: { recordId: string }[] }).records) {
+    const res = await ingestGate(env, room.recordId).fetch(`https://gate/close-idle?room=${room.recordId}`)
+    if (res.ok) closed += ((await res.json()) as { closed: number }).closed
+  }
+  if (closed) console.info(`[cron] closed ${closed} idle sessions`)
 }

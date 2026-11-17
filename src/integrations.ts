@@ -22,9 +22,17 @@
 
 export const integrations: Record<
   string,
-  { billing: 'developer' | 'user'; anonymous?: boolean }
+  {
+    billing: 'developer' | 'user'
+    anonymous?: boolean
+    /** Allow browser calls through /api/integrations for a 'developer' integration. Off by default. */
+    browser?: boolean
+  }
 > = {
   google: { billing: 'user' },
   composio: { billing: 'user' },
+  // Playtest Room calls both from owner-gated server actions only.
+  anthropic: { billing: 'developer' },
+  email: { billing: 'developer' },
   // openai: { billing: 'developer', anonymous: true },
 }

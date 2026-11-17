@@ -240,6 +240,14 @@ export function registerAuthAndIntegrationRoutes(app: Hono<AppContext>): void {
     const config = lookupOwn(integrations, integrationName)
     const billingMode = config?.billing ?? 'developer'
 
+    // Playtest Room: owner-billed integrations are server-only. Without this,
+    // any signed-in visitor could call e.g. anthropic/* from the browser and
+    // spend the owner's credits. Server actions reach them through
+    // tools.integration, behind their own owner checks and limits.
+    if (billingMode === 'developer' && !config?.browser) {
+      return c.json({ error: 'This integration is available to the server only' }, 403)
+    }
+
     // Sign-in is required unless the app opts this integration into anonymous
     // use; developer billing would otherwise let any visitor spend the owner's
     // credits. User billing always needs a caller to bill.

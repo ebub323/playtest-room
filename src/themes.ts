@@ -18,6 +18,11 @@
 
 export const THEMES = [
   {
+    id: 'workbench',
+    label: 'Workbench',
+    description: 'Playtest Room: dark tool surface with an amber accent.',
+  },
+  {
     id: 'slate',
     label: 'Slate',
     description: 'Neutral dark placeholder default. Replace with your own theme.',
