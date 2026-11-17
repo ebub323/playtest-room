@@ -18,8 +18,10 @@ using UnityEngine;
 
 public static class PlaytestWebGLBuild
 {
+    // Gzip + 256px: loads in ~20s on hosts that send no Content-Encoding (GitHub
+    // Pages). Unity's JS Brotli fallback stalls for minutes on large data files.
     [MenuItem("Playtest Room/Build WebGL")]
-    public static void BuildFromMenu() => Run("Builds/WebGL");
+    public static void BuildFromMenu() => Run("Builds/WebGL", 256);
 
     public static void Build()
     {
@@ -27,11 +29,20 @@ public static class PlaytestWebGLBuild
         var args = Environment.GetCommandLineArgs();
         int i = Array.IndexOf(args, "-buildOutput");
         if (i >= 0 && i + 1 < args.Length) output = args[i + 1];
-        var report = Run(output);
+        int maxTex = 0;
+        int t = Array.IndexOf(args, "-maxTextureSize");
+        if (t >= 0 && t + 1 < args.Length) int.TryParse(args[t + 1], out maxTex);
+        bool brotli = Array.IndexOf(args, "-brotli") >= 0;
+        var report = Run(output, maxTex, brotli);
         EditorApplication.Exit(report != null && report.summary.result == BuildResult.Succeeded ? 0 : 1);
     }
 
-    static BuildReport Run(string output)
+    // maxTextureSize caps every texture for this build only (0 = as imported).
+    // Web builds download everything up front, so 512 or 1024 keeps the data
+    // file small enough for static hosts with per-file limits (GitHub: 100 MB).
+    // brotli: ~15-20% smaller than gzip; with the decompression fallback the
+    // browser unpacks it in JS, so it still works on hosts without headers.
+    static BuildReport Run(string output, int maxTextureSize = 0, bool brotli = false)
     {
         string[] scenes = EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();
         if (scenes.Length == 0)
@@ -43,9 +54,11 @@ public static class PlaytestWebGLBuild
         var prevCompression = PlayerSettings.WebGL.compressionFormat;
         var prevFallback = PlayerSettings.WebGL.decompressionFallback;
         var prevExceptions = PlayerSettings.WebGL.exceptionSupport;
+        var prevMaxTex = EditorUserBuildSettings.overrideMaxTextureSize;
         try
         {
-            PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Gzip;
+            EditorUserBuildSettings.overrideMaxTextureSize = maxTextureSize;
+            PlayerSettings.WebGL.compressionFormat = brotli ? WebGLCompressionFormat.Brotli : WebGLCompressionFormat.Gzip;
             PlayerSettings.WebGL.decompressionFallback = true;
             // Full stack traces make crash grouping meaningful in the dashboard.
             PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.FullWithStacktrace;
@@ -66,6 +79,7 @@ public static class PlaytestWebGLBuild
             PlayerSettings.WebGL.compressionFormat = prevCompression;
             PlayerSettings.WebGL.decompressionFallback = prevFallback;
             PlayerSettings.WebGL.exceptionSupport = prevExceptions;
+            EditorUserBuildSettings.overrideMaxTextureSize = prevMaxTex;
         }
     }
 }

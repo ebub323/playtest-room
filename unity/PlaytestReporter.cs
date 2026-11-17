@@ -286,7 +286,8 @@ public class PlaytestReporter : MonoBehaviour
             {
                 // 4xx: bad key, ended playtest, or rejected payload. Retrying won't help.
                 Debug.LogWarning("[Playtest] report rejected (" + code + "): " + req.downloadHandler.text);
-                if (code == 401 || code == 410) enabled = false;
+                // Wrong key, unknown room, or ended playtest: stop for this session.
+                if (code == 401 || code == 404 || code == 410) { enabled = false; StopAllCoroutines(); }
             }
         }
         sending = false;

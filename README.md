@@ -87,7 +87,8 @@ The multi-user spec needs two DeepSpace test accounts (`npx deepspace test accou
 2. Optional: report game-specific moments with `PlaytestReporter.Death(pos, "cause")`,
    `PlaytestReporter.Mark("text", pos)` and `PlaytestReporter.SetLevel("name")`.
    `unity/examples/HollowGamesPlaytest.cs` does this for The Hollow Games without touching its scripts.
-3. Build WebGL (`unity/Editor/PlaytestWebGLBuild.cs` adds **Playtest Room > Build WebGL**: gzip with
+3. Build WebGL (`unity/Editor/PlaytestWebGLBuild.cs` adds **Playtest Room > Build WebGL**: textures capped at
+   256 px for the web, gzip with
    decompression fallback and full stack traces) and host the output on any static host.
 4. Open a room, paste the build URL, share the tester link. Players press **F8** in game to report.
 

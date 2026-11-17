@@ -251,7 +251,8 @@ function FeedPanel({ events, reports, now }: { events: RecordData<GameEvent>[]; 
                   <span className="font-medium">{item.rec.data.playerName}</span> {EVENT_LABEL[item.rec.data.type] ?? item.rec.data.type}
                   {item.rec.data.type === 'level' ? ` ${item.rec.data.message}` : ''}
                   {item.rec.data.type !== 'level' && item.rec.data.level ? <span className="text-muted-foreground"> in {item.rec.data.level}</span> : null}
-                  {item.rec.data.type === 'error' || item.rec.data.type === 'custom' ? (
+                  {(item.rec.data.type === 'error' || item.rec.data.type === 'custom' || item.rec.data.type === 'death') &&
+                  item.rec.data.message ? (
                     <span className="block truncate font-mono text-xs">{item.rec.data.message}</span>
                   ) : null}
                 </span>

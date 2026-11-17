@@ -20,10 +20,11 @@ public class HollowGamesPlaytest : MonoBehaviour
     bool wasGameOver;
     Enemy lastBoss;
 
+    // Unity runs all AfterSceneLoad hooks in no guaranteed order, so this can
+    // start before PlaytestReporter does. Always start, and check each frame.
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Boot()
     {
-        if (!PlaytestReporter.IsActive) return;
         var go = new GameObject("HollowGamesPlaytest");
         DontDestroyOnLoad(go);
         go.AddComponent<HollowGamesPlaytest>();
@@ -31,6 +32,7 @@ public class HollowGamesPlaytest : MonoBehaviour
 
     void Update()
     {
+        if (!PlaytestReporter.IsActive) return;
         if (!game)
         {
             // GameManager lives in the HollowGames scene, not the main menu.
