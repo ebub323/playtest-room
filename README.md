@@ -94,4 +94,4 @@ The multi-user spec needs two DeepSpace test accounts (`npx deepspace test accou
 
 ## Credits
 
-The Hollow Games demo was made by Okiki Popoola and Ebube Eze for COSC 332.
+The Hollow Games demo was made by Okiki Popoola and Ebube Eze.
