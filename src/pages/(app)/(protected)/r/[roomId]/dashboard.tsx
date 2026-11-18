@@ -180,13 +180,26 @@ function IssuesPanel({ issues, reports, now }: { issues: RecordData<Issue>[]; re
                     <span className="block truncate text-sm font-medium">{i.data.title}</span>
                     <span className="block text-xs text-muted-foreground">
                       {i.data.kind === 'crash' ? `Crash · ${i.data.players} players` : 'Feedback'} · seen {timeAgo(i.data.lastSeenAt, now)}
+                      {i.data.kind === 'feedback' && (
+                        <span
+                          className="ml-1.5 rounded border border-border px-1 py-px text-[10px] uppercase tracking-wide"
+                          title="Title, summary and starting severity were written by AI from player reports. Check the reports before acting on them."
+                        >
+                          AI-generated
+                        </span>
+                      )}
                     </span>
                   </span>
                   <span className="shrink-0 font-mono text-sm tabular-nums text-muted-foreground">×{i.data.count}</span>
                 </button>
                 {expanded && (
                   <div className="space-y-3 px-4 pb-4 pl-[4.25rem] text-sm">
-                    {i.data.summary && <p className="text-muted-foreground">{i.data.summary}</p>}
+                    {i.data.summary && (
+                      <p className="text-muted-foreground">
+                        {i.data.kind === 'feedback' && <span className="font-medium">AI summary: </span>}
+                        {i.data.summary}
+                      </p>
+                    )}
                     {i.data.sample && (
                       <pre className="max-h-40 overflow-auto rounded bg-background p-3 font-mono text-xs leading-relaxed text-muted-foreground">
                         {i.data.sample}

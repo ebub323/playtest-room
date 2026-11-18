@@ -81,6 +81,6 @@ export function buildDigest(name: string, sessions: Session[], issues: Issue[], 
     `${reportCount} player reports.`,
     '',
     top.length ? 'Open issues, most severe first:' : 'No open issues.',
-    ...top.map((i) => `- [${i.severity}] ${i.kind === 'crash' ? 'Crash' : 'Feedback'}: ${i.title} (${i.count}x)`),
+    ...top.map((i) => `- [${i.severity}] ${i.kind === 'crash' ? 'Crash' : 'Feedback (AI-written title)'}: ${i.title} (${i.count}x)`),
   ].join('\n')
 }

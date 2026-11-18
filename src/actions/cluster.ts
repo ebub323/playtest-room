@@ -9,6 +9,12 @@
  *
  * Spend control: owner-only, at most one run per room per 60 seconds, at most
  * 60 reports per run, a small model, and a capped output.
+ *
+ * Trust: the model reads player-written text, so its output is a suggestion.
+ * Titles and summaries are shown as AI-written in the dashboard, and the
+ * model's severity never raises anything on its own: an existing issue keeps
+ * the severity it has, and a new issue starts no higher than AI_MAX_SEVERITY.
+ * 'critical' is left to deterministic crash grouping and the developer.
  */
 
 import type { ActionHandler } from 'deepspace/worker'
@@ -18,6 +24,15 @@ import { requireRoomOwner } from './room-access.js'
 const MODEL = 'claude-haiku-5-5'
 const MAX_REPORTS = 60
 const COOLDOWN_MS = 60_000
+const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
+const AI_MAX_SEVERITY = 'high'
+
+/** The model's suggested severity for a NEW issue, clamped to AI_MAX_SEVERITY. */
+export function aiSeverity(suggested: unknown): string {
+  const i = SEVERITIES.indexOf(suggested as (typeof SEVERITIES)[number])
+  if (i < 0) return 'medium'
+  return SEVERITIES[Math.min(i, SEVERITIES.indexOf(AI_MAX_SEVERITY))]
+}
 
 type Report = { recordId: string; data: { note: string; category: string; level: string; playerName: string } }
 type Issue = { recordId: string; data: { kind: string; title: string; summary: string; count: number } }
@@ -80,7 +95,6 @@ export const clusterReports: ActionHandler<Env> = async ({ userId, params, env, 
     const ids = [...new Set(g.reportIds)].filter((id) => validReports.has(id))
     if (ids.length === 0) continue
     ids.forEach((id) => validReports.delete(id)) // each report lands once
-    const severity = ['low', 'medium', 'high', 'critical'].includes(g.severity) ? g.severity : 'medium'
     const prior = g.existingId ? existingById.get(g.existingId) : undefined
     const issueId = prior?.recordId ?? `fb-${crypto.randomUUID().slice(0, 12)}`
     const res = await tools.create(
@@ -89,10 +103,10 @@ export const clusterReports: ActionHandler<Env> = async ({ userId, params, env, 
         kind: 'feedback',
         title: String(g.title || 'Player feedback').slice(0, 140),
         summary: String(g.summary || '').slice(0, 600),
-        severity,
         count: (prior?.data.count ?? 0) + ids.length,
         lastSeenAt: now,
-        ...(prior ? {} : { status: 'open', firstSeenAt: now, players: 0, sample: '' }),
+        // Severity is set once, on creation; re-grouping never changes it.
+        ...(prior ? {} : { severity: aiSeverity(g.severity), status: 'open', firstSeenAt: now, players: 0, sample: '' }),
       },
       issueId,
     )
