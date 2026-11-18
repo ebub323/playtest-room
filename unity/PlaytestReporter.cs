@@ -5,7 +5,10 @@
 //
 // Settings, in priority order:
 //   1. The page URL (WebGL builds embedded in a Playtest Room page):
-//        ?ptRoom=<roomId>&ptKey=<ingestKey>&ptEndpoint=<https://app>&ptPlayer=<name>
+//        ?ptRoom=<roomId>&ptEndpoint=<https://app>&ptPlayer=<name>#ptKey=<ingestKey>
+//      The key rides in the fragment, which browsers never send to the game's
+//      host (no access logs, no Referer). A key in the query string, as older
+//      Playtest Room pages sent it, is still accepted; the fragment wins.
 //   2. Static fields set from code before the first scene loads, or in the Editor:
 //        PlaytestReporter.RoomId / IngestKey / Endpoint
 //
@@ -84,12 +87,23 @@ public class PlaytestReporter : MonoBehaviour
     {
         string url = Application.absoluteURL;
         if (string.IsNullOrEmpty(url)) return;
+        string fragment = "";
+        int hash = url.IndexOf('#');
+        if (hash >= 0)
+        {
+            fragment = url.Substring(hash + 1);
+            url = url.Substring(0, hash);
+        }
         int q = url.IndexOf('?');
-        if (q < 0) return;
-        string query = url.Substring(q + 1);
-        int hash = query.IndexOf('#');
-        if (hash >= 0) query = query.Substring(0, hash);
-        foreach (string pair in query.Split('&'))
+        // Query first, then fragment, so a fragment value overrides.
+        if (q >= 0) ReadUrlParams(url.Substring(q + 1));
+        ReadUrlParams(fragment);
+    }
+
+    static void ReadUrlParams(string paramString)
+    {
+        if (string.IsNullOrEmpty(paramString)) return;
+        foreach (string pair in paramString.Split('&'))
         {
             int eq = pair.IndexOf('=');
             if (eq <= 0) continue;

@@ -1,4 +1,5 @@
 import { getAuthToken } from 'deepspace'
+import { validateGameUrl } from './game-url'
 
 export type RoomIndex = { name: string; gameUrl: string; ownerId: string; status: 'live' | 'ended' }
 
@@ -83,15 +84,24 @@ export async function callAction<T = unknown>(name: string, params: Record<strin
 }
 
 /**
- * The URL the room page embeds. The Unity reporter reads these query
+ * The URL the room page embeds, or '' when the stored URL may not be embedded
+ * (rooms saved before the host rules existed). The Unity reporter reads these
  * parameters, so one hosted build reports to whichever room embeds it.
+ *
+ * The ingest key goes in the fragment, which browsers never send to the game
+ * host: it stays out of that host's access logs and Referer headers. The rest
+ * stay in the query string. PlaytestReporter.cs reads both.
  */
 export function embedUrl(info: RoomInfo, roomId: string, playerName: string): string {
-  const url = new URL(info.gameUrl)
+  const allowed = validateGameUrl(info.gameUrl, window.location.host)
+  if (!allowed) return ''
+  const url = new URL(allowed)
   url.searchParams.set('ptRoom', roomId)
-  url.searchParams.set('ptKey', info.ingestKey)
   url.searchParams.set('ptEndpoint', window.location.origin)
   url.searchParams.set('ptPlayer', playerName.slice(0, 40))
+  const fragment = new URLSearchParams(url.hash.slice(1))
+  fragment.set('ptKey', info.ingestKey)
+  url.hash = fragment.toString()
   return url.toString()
 }
 

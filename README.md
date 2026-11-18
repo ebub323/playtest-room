@@ -18,7 +18,7 @@ trace; free-text reports are grouped by an AI pass on demand. Ending a playtest 
  │  FPS / errors / scene / F8    │                              │        ▼                     │
  └───────────────────────────────┘                              │ IngestGate DO (one per room) │
         ▲ embedded in an iframe with                            │  key check (cached 30s)      │
-        │ ?ptRoom&ptKey&ptEndpoint&ptPlayer                     │  token buckets room+session  │
+        │ ?ptRoom&ptEndpoint&ptPlayer #ptKey                    │  IP, key, room, session caps │
  ┌──────┴────────────────────────┐                              │  serialized writes, crash    │
  │ /r/:roomId   (tester)         │◄──── live WebSocket ────┐    │  fingerprints + counts       │
  │ /r/:roomId/dashboard (owner)  │                         │    └────────┬─────────────────────┘

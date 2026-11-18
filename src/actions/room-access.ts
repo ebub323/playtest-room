@@ -38,21 +38,9 @@ export function newIngestKey(): string {
   return `pk_${btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`
 }
 
-/**
- * Game URLs are embedded in an iframe on the room page. Only https is
- * accepted in production; http is allowed for localhost while developing.
- */
-export function validateGameUrl(raw: unknown): string | null {
-  if (typeof raw !== 'string' || raw.length > 500) return null
-  try {
-    const url = new URL(raw)
-    const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
-    if (url.protocol === 'https:' || (url.protocol === 'http:' && local)) return url.toString()
-    return null
-  } catch {
-    return null
-  }
-}
+// Game URLs are embedded in an iframe on the room page; the rules (https
+// only, never this app's host or *.app.space) live with the client check.
+export { GAME_URL_RULES, validateGameUrl } from '../lib/game-url.js'
 
 export function roomTools(env: Env, userId: string, callerJwt: string, roomId: string): ActionTools {
   return createActionTools(env, userId, callerJwt, roomScope(roomId))

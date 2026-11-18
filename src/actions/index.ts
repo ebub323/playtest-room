@@ -4,6 +4,7 @@ import { ingestGate } from '../server/ingest.js'
 import { clusterReports } from './cluster.js'
 import { endPlaytest } from './end-playtest.js'
 import {
+  GAME_URL_RULES,
   newIngestKey,
   newRoomId,
   requireRoomOwner,
@@ -18,7 +19,7 @@ const createRoom: ActionHandler<Env> = async ({ userId, params, tools, env, call
   const name = typeof params.name === 'string' ? params.name.trim().slice(0, 80) : ''
   if (!name) return { success: false, error: 'Give the room a name' }
   const gameUrl = params.gameUrl ? validateGameUrl(params.gameUrl) : ''
-  if (gameUrl === null) return { success: false, error: 'Game URL must be an https:// link' }
+  if (gameUrl === null) return { success: false, error: GAME_URL_RULES }
 
   const mine = await tools.query('rooms', { where: { ownerId: userId }, limit: MAX_ROOMS_PER_USER + 1 })
   if (mine.success && (mine.data as { count: number }).count >= MAX_ROOMS_PER_USER) {
@@ -49,7 +50,7 @@ const updateRoom: ActionHandler<Env> = async ({ userId, params, tools, env, call
   if (typeof params.name === 'string' && params.name.trim()) patch.name = params.name.trim().slice(0, 80)
   if (params.gameUrl !== undefined) {
     const gameUrl = params.gameUrl === '' ? '' : validateGameUrl(params.gameUrl)
-    if (gameUrl === null) return { success: false, error: 'Game URL must be an https:// link' }
+    if (gameUrl === null) return { success: false, error: GAME_URL_RULES }
     patch.gameUrl = gameUrl
   }
   const r = await room.tools.update('room_info', 'info', patch)

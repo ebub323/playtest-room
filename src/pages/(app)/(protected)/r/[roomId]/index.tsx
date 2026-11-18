@@ -40,7 +40,9 @@ export default function PlayPage() {
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
               {info.status === 'ended'
                 ? 'This playtest has ended. Thanks for playing.'
-                : isOwner
+                : info.gameUrl
+                  ? 'This build URL cannot be embedded. Builds must be on an https:// host outside app.space.'
+                  : isOwner
                   ? 'Add your WebGL build URL on the Dashboard to start the playtest.'
                   : 'The developer has not added a build yet.'}
             </div>
