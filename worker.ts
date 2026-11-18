@@ -131,10 +131,14 @@ export type AppContext = { Bindings: Env }
 const app = new Hono<AppContext>()
 // Security headers on everything the worker answers; public/_headers covers
 // files the asset layer serves directly. Same list: src/server/security-headers.ts.
-app.use('*', async (c, next) => {
-  await next()
-  c.res = withSecurityHeaders(c.res)
-})
+// Production builds only: in `deepspace dev` the worker also serves Vite's dev
+// HTML, whose inline react-refresh preamble a script-src 'self' CSP blocks.
+if (!import.meta.env.DEV) {
+  app.use('*', async (c, next) => {
+    await next()
+    c.res = withSecurityHeaders(c.res)
+  })
+}
 // Own-origin CORS on /api/*; /api/ingest/* keeps its any-origin policy.
 registerApiCors(app)
 // A Durable Object exists only once something fetches it, and the CronRoom
