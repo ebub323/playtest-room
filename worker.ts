@@ -6,7 +6,6 @@
  */
 
 import { Hono } from 'hono'
-import { cors } from 'hono/cors'
 import {
   armCronRoom,
   CanvasRoom,
@@ -34,6 +33,7 @@ import {
 } from './src/server/http-routes.js'
 import { registerRealtimeRoutes } from './src/server/realtime-routes.js'
 import { registerIngestRoutes } from './src/server/ingest.js'
+import { registerApiCors } from './src/server/cors.js'
 import { withSecurityHeaders } from './src/server/security-headers.js'
 
 // Dynamic deploy reads this manifest to create the app's DO bindings.
@@ -135,15 +135,8 @@ app.use('*', async (c, next) => {
   await next()
   c.res = withSecurityHeaders(c.res)
 })
-// The app's own pages call /api same-origin, which needs no CORS, so only
-// this origin is ever echoed back. /api/ingest/* is the exception: hosted game
-// builds post from any origin, and src/server/ingest.ts registers its own
-// POST-only, credential-free CORS for it.
-const ownOriginCors = cors({ origin: (origin, c) => (origin === new URL(c.req.url).origin ? origin : null) })
-app.use('/api/*', async (c, next) => {
-  if (new URL(c.req.url).pathname.startsWith('/api/ingest/')) return next()
-  return ownOriginCors(c, next)
-})
+// Own-origin CORS on /api/*; /api/ingest/* keeps its any-origin policy.
+registerApiCors(app)
 // A Durable Object exists only once something fetches it, and the CronRoom
 // arms its alarm in that first fetch — so wake it from the request path, or a
 // deployed schedule waits for a visitor. Once per isolate; no-op without tasks.

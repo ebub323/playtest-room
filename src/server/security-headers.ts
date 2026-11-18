@@ -14,7 +14,8 @@
  * - img-src https: user avatars come from the sign-in provider's CDN.
  * - connect-src 'self': every API call and WebSocket goes to this origin
  *   ('self' matches same-host ws:/wss: in current browsers).
- * - frame-src https: the room page embeds the developer's hosted WebGL build,
+ * - frame-src https: (plus local http, which validateGameUrl allows for
+ *   development): the room page embeds the developer's hosted WebGL build,
  *   which lives on any https host (itch.io, GitHub Pages, ...).
  */
 
@@ -25,7 +26,7 @@ export const CONTENT_SECURITY_POLICY = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "connect-src 'self'",
-  'frame-src https:',
+  'frame-src https: http://localhost:* http://127.0.0.1:*',
   "worker-src 'self' blob:",
   "media-src 'self' blob:",
   "object-src 'none'",
