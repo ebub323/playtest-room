@@ -34,6 +34,7 @@ import {
 } from './src/server/http-routes.js'
 import { registerRealtimeRoutes } from './src/server/realtime-routes.js'
 import { registerIngestRoutes } from './src/server/ingest.js'
+import { withSecurityHeaders } from './src/server/security-headers.js'
 
 // Dynamic deploy reads this manifest to create the app's DO bindings.
 export const __DO_MANIFEST__ = [
@@ -128,7 +129,21 @@ export interface Env extends DOBindings<typeof __DO_MANIFEST__> {
 export type AppContext = { Bindings: Env }
 
 const app = new Hono<AppContext>()
-app.use('/api/*', cors())
+// Security headers on everything the worker answers; public/_headers covers
+// files the asset layer serves directly. Same list: src/server/security-headers.ts.
+app.use('*', async (c, next) => {
+  await next()
+  c.res = withSecurityHeaders(c.res)
+})
+// The app's own pages call /api same-origin, which needs no CORS, so only
+// this origin is ever echoed back. /api/ingest/* is the exception: hosted game
+// builds post from any origin, and src/server/ingest.ts registers its own
+// POST-only, credential-free CORS for it.
+const ownOriginCors = cors({ origin: (origin, c) => (origin === new URL(c.req.url).origin ? origin : null) })
+app.use('/api/*', async (c, next) => {
+  if (new URL(c.req.url).pathname.startsWith('/api/ingest/')) return next()
+  return ownOriginCors(c, next)
+})
 // A Durable Object exists only once something fetches it, and the CronRoom
 // arms its alarm in that first fetch — so wake it from the request path, or a
 // deployed schedule waits for a visitor. Once per isolate; no-op without tasks.

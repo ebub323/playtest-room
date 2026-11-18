@@ -405,6 +405,17 @@ function namesAFile(pathname: string): boolean {
 }
 
 /**
+ * A dot-segment path (`/.git/config`, `/.env`) other than `/.well-known/*`.
+ * No client route looks like this, so it must 404 rather than get the app
+ * shell at 200, which reads to scanners as an exposed file.
+ */
+function namesADotPath(pathname: string): boolean {
+  return pathname
+    .split('/')
+    .some((segment, i) => segment.startsWith('.') && !(i === 1 && segment === '.well-known'))
+}
+
+/**
  * Register the client-route fallback last so it cannot shadow worker routes.
  * Deploys set `not_found_handling: "none"`, so a 404 from the binding is a
  * real miss and this worker makes the call the asset layer cannot.
@@ -427,7 +438,7 @@ export function registerStaticRoutes(app: Hono<AppContext>): void {
     const response = await c.env.ASSETS.fetch(c.req.raw)
     if (response.status !== 404) return response
 
-    if (namesAFile(url.pathname) || isPlatformReservedPath(url.pathname)) {
+    if (namesAFile(url.pathname) || namesADotPath(url.pathname) || isPlatformReservedPath(url.pathname)) {
       return c.json({ error: 'not_found' }, 404)
     }
     // Once the prerender has run, `/` is the landing page, not an empty
