@@ -10,11 +10,16 @@
  * publishable ingest key instead and hands the request to that room's
  * IngestGate Durable Object, which:
  *
- *  1. checks the key against the room (cached for 30s, invalidated on rotate),
- *  2. applies token-bucket rate limits per room and per session,
- *  3. serializes the room's writes, so per-session aggregates and per-crash
+ *  1. applies a per-client-IP token bucket, so rotating sessionIds or keys
+ *     from one address cannot get around the limits below,
+ *  2. checks the key against the room (cached for 30s, invalidated on rotate)
+ *     BEFORE charging the room's budget; failed keys are charged to their own
+ *     small bucket, so someone who knows a room id but not its key cannot
+ *     starve the real testers,
+ *  3. applies token-bucket rate limits per room and per session,
+ *  4. serializes the room's writes, so per-session aggregates and per-crash
  *     counts are read-modify-write safe without trusting the client,
- *  4. writes sessions/events/issues/reports into the room's record scope
+ *  5. writes sessions/events/issues/reports into the room's record scope
  *     through the RBAC-off tools API, where every connected dashboard sees
  *     them live.
  *
@@ -32,6 +37,7 @@ import type { ActionTools } from 'deepspace/worker'
 import type { AppContext, Env } from '../../worker.js'
 import { createActionTools } from './action-routes.js'
 import { crashFingerprint } from './fingerprint.js'
+import { BucketMap, newBucket, take, type Bucket } from './ingest-limits.js'
 
 const ROOM_ID_RE = /^[a-f0-9]{32}$/
 const MAX_BODY_BYTES = 2_500_000
@@ -46,6 +52,13 @@ const SESSION_IDLE_MS = 3 * 60_000
 const ROOM_BUCKET = { capacity: 60, refillPerSec: 5 }
 const SESSION_BUCKET = { capacity: 10, refillPerSec: 1 }
 const MAX_TRACKED_SESSIONS = 500
+// One client address: room for several testers behind one NAT (a game jam,
+// an office) at ~0.5 req/s each, far below the room's own budget.
+const IP_BUCKET = { capacity: 30, refillPerSec: 3 }
+const MAX_TRACKED_IPS = 1_000
+// Requests with a wrong or missing key. Kept small and separate from the room
+// bucket: a flood of bad keys only ever slows down other bad keys.
+const FAILED_KEY_BUCKET = { capacity: 10, refillPerSec: 0.5 }
 
 const vec3 = z.object({ x: z.number(), y: z.number(), z: z.number() }).optional()
 const shortText = (max: number) => z.string().max(max).optional()
@@ -108,16 +121,6 @@ type SessionAgg = {
 
 type CrashAgg = { count: number; players: string[]; firstSeenAt: number }
 
-type Bucket = { tokens: number; at: number }
-
-function take(bucket: Bucket, cfg: { capacity: number; refillPerSec: number }, now: number): boolean {
-  bucket.tokens = Math.min(cfg.capacity, bucket.tokens + ((now - bucket.at) / 1000) * cfg.refillPerSec)
-  bucket.at = now
-  if (bucket.tokens < 1) return false
-  bucket.tokens -= 1
-  return true
-}
-
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -126,9 +129,13 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
 }
 
 export class IngestGate implements DurableObject {
-  private roomBucket: Bucket = { tokens: ROOM_BUCKET.capacity, at: Date.now() }
-  private sessionBuckets = new Map<string, Bucket>()
-  private keyCache: { key: string; ownerId: string; status: string; at: number } | null = null
+  private roomBucket: Bucket = newBucket(ROOM_BUCKET, Date.now())
+  private failedKeyBucket: Bucket = newBucket(FAILED_KEY_BUCKET, Date.now())
+  private sessionBuckets = new BucketMap(SESSION_BUCKET, MAX_TRACKED_SESSIONS)
+  private ipBuckets = new BucketMap(IP_BUCKET, MAX_TRACKED_IPS)
+  // `missing` rooms are cached too, so probing unknown room ids costs no
+  // record-room reads beyond one per cache window.
+  private keyCache: { key: string; ownerId: string; status: string; missing: boolean; at: number } | null = null
   private queue: Promise<unknown> = Promise.resolve()
 
   constructor(
@@ -150,6 +157,24 @@ export class IngestGate implements DurableObject {
     }
 
     const now = Date.now()
+    // Set by the worker from CF-Connecting-IP; the gate is not reachable
+    // from outside, so callers cannot supply their own value.
+    const clientIp = request.headers.get('X-Client-IP') || 'unknown'
+    if (!this.ipBuckets.take(clientIp, now)) {
+      return json({ error: 'Too many requests' }, 429, { 'Retry-After': '5' })
+    }
+
+    // Key first, from the cache: a wrong key must never spend the room's budget.
+    const tools = createActionTools(this.env, this.env.OWNER_USER_ID, '', `room:${roomId}`)
+    const auth = await this.checkKey(tools, request.headers.get('X-Playtest-Key') ?? '')
+    if (auth === 'missing' || auth === 'bad-key') {
+      if (!take(this.failedKeyBucket, FAILED_KEY_BUCKET, now)) {
+        return json({ error: 'Too many failed attempts' }, 429, { 'Retry-After': '10' })
+      }
+      return auth === 'missing' ? json({ error: 'Room not found' }, 404) : json({ error: 'Invalid ingest key' }, 401)
+    }
+    if (auth.status === 'ended') return json({ error: 'This playtest has ended' }, 410)
+
     if (!take(this.roomBucket, ROOM_BUCKET, now)) {
       return json({ error: 'Room rate limit exceeded' }, 429, { 'Retry-After': '2' })
     }
@@ -165,24 +190,9 @@ export class IngestGate implements DurableObject {
       return json({ error: 'Body must be JSON' }, 400)
     }
 
-    let bucket = this.sessionBuckets.get(payload.sessionId)
-    if (!bucket) {
-      if (this.sessionBuckets.size >= MAX_TRACKED_SESSIONS) {
-        const oldest = this.sessionBuckets.keys().next().value
-        if (oldest) this.sessionBuckets.delete(oldest)
-      }
-      bucket = { tokens: SESSION_BUCKET.capacity, at: now }
-      this.sessionBuckets.set(payload.sessionId, bucket)
-    }
-    if (!take(bucket, SESSION_BUCKET, now)) {
+    if (!this.sessionBuckets.take(payload.sessionId, now)) {
       return json({ error: 'Session rate limit exceeded' }, 429, { 'Retry-After': '2' })
     }
-
-    const tools = createActionTools(this.env, this.env.OWNER_USER_ID, '', `room:${roomId}`)
-    const auth = await this.checkKey(tools, request.headers.get('X-Playtest-Key') ?? '')
-    if (auth === 'missing') return json({ error: 'Room not found' }, 404)
-    if (auth === 'bad-key') return json({ error: 'Invalid ingest key' }, 401)
-    if (auth.status === 'ended') return json({ error: 'This playtest has ended' }, 410)
 
     return this.serialize(() => this.ingest(roomId, tools, auth.ownerId, payload))
   }
@@ -202,14 +212,17 @@ export class IngestGate implements DurableObject {
     if (!this.keyCache || now - this.keyCache.at > KEY_CACHE_MS) {
       const r = await tools.get('room_info', 'info')
       const record = r.success ? (r.data as { record?: { data: Record<string, unknown> } }).record : undefined
-      if (!record) return 'missing'
-      this.keyCache = {
-        key: String(record.data.ingestKey ?? ''),
-        ownerId: String(record.data.ownerId ?? ''),
-        status: String(record.data.status ?? 'live'),
-        at: now,
-      }
+      this.keyCache = record
+        ? {
+            key: String(record.data.ingestKey ?? ''),
+            ownerId: String(record.data.ownerId ?? ''),
+            status: String(record.data.status ?? 'live'),
+            missing: false,
+            at: now,
+          }
+        : { key: '', ownerId: '', status: '', missing: true, at: now }
     }
+    if (this.keyCache.missing) return 'missing'
     if (!presented || !timingSafeEqual(presented, this.keyCache.key)) return 'bad-key'
     return { ownerId: this.keyCache.ownerId, status: this.keyCache.status }
   }
@@ -433,6 +446,8 @@ export function registerIngestRoutes(app: Hono<AppContext>): void {
         headers: {
           'Content-Type': 'application/json',
           'X-Playtest-Key': c.req.header('X-Playtest-Key') ?? '',
+          // Cloudflare sets this and strips any client-sent copy.
+          'X-Client-IP': c.req.header('CF-Connecting-IP') ?? '',
         },
         body,
       }),
