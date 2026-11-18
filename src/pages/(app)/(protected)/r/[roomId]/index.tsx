@@ -4,9 +4,9 @@
  */
 
 import { useMemo, useState, type FormEvent } from 'react'
-import { useMutations, usePresenceRoom, useQuery, useUser } from 'deepspace'
+import { usePresenceRoom, useQuery, useUser } from 'deepspace'
 import { Button, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea, useToast } from '@/components/ui'
-import { embedUrl, roomScope, timeAgo, type Report, type Session } from '@/lib/playtest'
+import { callAction, embedUrl, roomScope, timeAgo, type Report, type Session } from '@/lib/playtest'
 import { useRoom } from './_layout'
 
 export default function PlayPage() {
@@ -72,15 +72,14 @@ export default function PlayPage() {
           </p>
         </section>
 
-        {info.status === 'live' && <FeedbackForm playerName={playerName} />}
+        {info.status === 'live' && <FeedbackForm roomId={roomId} />}
         <MyReports />
       </aside>
     </div>
   )
 }
 
-function FeedbackForm({ playerName }: { playerName: string }) {
-  const { createConfirmed, ready } = useMutations<Report>('reports')
+function FeedbackForm({ roomId }: { roomId: string }) {
   const { success, error } = useToast()
   const [note, setNote] = useState('')
   const [category, setCategory] = useState<Report['category']>('bug')
@@ -91,17 +90,8 @@ function FeedbackForm({ playerName }: { playerName: string }) {
     if (!note.trim() || busy) return
     setBusy(true)
     try {
-      await createConfirmed({
-        sessionId: '',
-        source: 'web',
-        playerName,
-        category,
-        note: note.trim().slice(0, 2000),
-        level: '',
-        position: null,
-        screenshotKey: '',
-        issueId: '',
-      })
+      // Server-side so source, player name and issue link cannot be forged.
+      await callAction('submitReport', { roomId, category, note: note.trim().slice(0, 2000) })
       setNote('')
       success('Report sent', 'The developer sees it now.')
     } catch (err) {
@@ -139,7 +129,7 @@ function FeedbackForm({ playerName }: { playerName: string }) {
           placeholder="I fell through the floor near the colosseum gate…"
         />
       </div>
-      <Button type="submit" className="w-full" disabled={!ready || busy || !note.trim()}>
+      <Button type="submit" className="w-full" disabled={busy || !note.trim()}>
         {busy ? 'Sending…' : 'Send report'}
       </Button>
     </form>

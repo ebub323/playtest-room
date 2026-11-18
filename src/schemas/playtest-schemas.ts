@@ -13,7 +13,9 @@
  * Game telemetry (sessions, events, crash issues) is written only by the
  * ingest route (src/server/ingest.ts) through the RBAC-off tools API, so
  * clients get read access and no write access to those collections. Players
- * in the browser can file reports directly.
+ * in the browser file reports through the `submitReport` server action
+ * (src/actions/reports.ts), which sets source, player name and issue link
+ * itself, so clients cannot create or edit report records directly.
  *
  * Access model: a room is shared by link. Anyone signed in who knows the
  * room id can read it (room ids are random, 128-bit). Owner-only operations
@@ -118,8 +120,10 @@ export const reportsSchema: CollectionSchema = {
   permissions: {
     '*': nothing,
     viewer: readOnly,
-    member: { read: true, create: true, update: 'own', delete: 'own' },
-    admin: { read: true, create: true, update: true, delete: true },
+    // No direct create/update: a client could otherwise set source:'game',
+    // another player's name, an issueId or a foreign screenshotKey.
+    member: { read: true, create: false, update: false, delete: 'own' },
+    admin: { read: true, create: false, update: false, delete: true },
   },
 }
 

@@ -3,6 +3,7 @@ import type { Env } from '../../worker'
 import { ingestGate } from '../server/ingest.js'
 import { clusterReports } from './cluster.js'
 import { endPlaytest } from './end-playtest.js'
+import { submitReport } from './reports.js'
 import {
   GAME_URL_RULES,
   newIngestKey,
@@ -88,4 +89,5 @@ export const actions: Record<string, ActionHandler<Env>> = {
   setIssueStatus,
   clusterReports,
   endPlaytest,
+  submitReport,
 }
